@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Search, Package, AlertTriangle, Upload, X, Save } from 'lucide-react';
-import { supabase } from '../../config/supabase';
+import { produitsAPI, fournisseursAPI } from '../../config/api';
 import { Produit, Fournisseur } from '../../types';
 import toast from 'react-hot-toast';
 
@@ -29,13 +29,12 @@ export const ProduitsPage: React.FC = () => {
 
   const fetchProduits = async () => {
     try {
-      const { data, error } = await supabase
-        .from('produits')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setProduits(data || []);
+      const response = await produitsAPI.getAll();
+      const produitsData = response.data.map((p: any) => ({
+        ...p,
+        createdAt: new Date(p.created_at)
+      }));
+      setProduits(produitsData);
     } catch (error) {
       console.error('Erreur lors du chargement des produits:', error);
       toast.error('Erreur lors du chargement des produits');
@@ -46,12 +45,12 @@ export const ProduitsPage: React.FC = () => {
 
   const fetchFournisseurs = async () => {
     try {
-      const { data, error } = await supabase
-        .from('fournisseurs')
-        .select('*');
-
-      if (error) throw error;
-      setFournisseurs(data || []);
+      const response = await fournisseursAPI.getAll();
+      const fournisseursData = response.data.map((f: any) => ({
+        ...f,
+        createdAt: new Date(f.created_at)
+      }));
+      setFournisseurs(fournisseursData);
     } catch (error) {
       console.error('Erreur lors du chargement des fournisseurs:', error);
     }
@@ -69,24 +68,6 @@ export const ProduitsPage: React.FC = () => {
     }
   };
 
-  const uploadImage = async (file: File): Promise<string> => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}.${fileExt}`;
-    const filePath = `produits/${fileName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('images')
-      .upload(filePath, file);
-
-    if (uploadError) throw uploadError;
-
-    const { data } = supabase.storage
-      .from('images')
-      .getPublicUrl(filePath);
-
-    return data.publicUrl;
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -94,30 +75,22 @@ export const ProduitsPage: React.FC = () => {
     try {
       let imageUrl = editingProduit?.image_url || '';
 
-      if (imageFile) {
-        imageUrl = await uploadImage(imageFile);
+      // Note: Image upload would need to be implemented separately
+      // For now, we'll use the preview URL or existing URL
+      if (imageFile && imagePreview) {
+        imageUrl = imagePreview;
       }
 
       const produitData = {
         ...formData,
-        image_url: imageUrl,
-        created_at: editingProduit ? editingProduit.createdAt.toISOString() : new Date().toISOString()
+        image_url: imageUrl
       };
 
       if (editingProduit) {
-        const { error } = await supabase
-          .from('produits')
-          .update(produitData)
-          .eq('id', editingProduit.id);
-
-        if (error) throw error;
+        await produitsAPI.update({ ...produitData, id: editingProduit.id });
         toast.success('Produit modifié avec succès');
       } else {
-        const { error } = await supabase
-          .from('produits')
-          .insert([produitData]);
-
-        if (error) throw error;
+        await produitsAPI.create(produitData);
         toast.success('Produit ajouté avec succès');
       }
 
@@ -149,22 +122,7 @@ export const ProduitsPage: React.FC = () => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer ce produit ?')) return;
 
     try {
-      const { error } = await supabase
-        .from('produits')
-        .delete()
-        .eq('id', produit.id);
-
-      if (error) throw error;
-
-      if (produit.image_url) {
-        const filePath = produit.image_url.split('/').pop();
-        if (filePath) {
-          await supabase.storage
-            .from('images')
-            .remove([`produits/${filePath}`]);
-        }
-      }
-
+      await produitsAPI.delete(produit.id);
       toast.success('Produit supprimé avec succès');
       fetchProduits();
     } catch (error) {

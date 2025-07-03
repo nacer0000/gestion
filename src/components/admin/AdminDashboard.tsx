@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Package, Store, Users, AlertTriangle, TrendingUp, DollarSign } from 'lucide-react';
-import { supabase } from '../../config/supabase';
+import { produitsAPI, stocksAPI, magasinsAPI, usersAPI } from '../../config/api';
 import { Produit, Stock, Magasin, User } from '../../types';
 import toast from 'react-hot-toast';
 
@@ -23,47 +23,35 @@ export const AdminDashboard: React.FC = () => {
   const fetchDashboardData = async () => {
     try {
       // Récupérer les produits
-      const { data: produits, error: produitsError } = await supabase
-        .from('produits')
-        .select('*');
-
-      if (produitsError) throw produitsError;
+      const produitsResponse = await produitsAPI.getAll();
+      const produits = produitsResponse.data;
 
       // Récupérer les magasins
-      const { data: magasins, error: magasinsError } = await supabase
-        .from('magasins')
-        .select('*');
-
-      if (magasinsError) throw magasinsError;
+      const magasinsResponse = await magasinsAPI.getAll();
+      const magasins = magasinsResponse.data;
 
       // Récupérer les utilisateurs
-      const { data: utilisateurs, error: utilisateursError } = await supabase
-        .from('users')
-        .select('*');
-
-      if (utilisateursError) throw utilisateursError;
+      const utilisateursResponse = await usersAPI.getAll();
+      const utilisateurs = utilisateursResponse.data;
 
       // Récupérer les stocks
-      const { data: stocks, error: stocksError } = await supabase
-        .from('stocks')
-        .select('*');
-
-      if (stocksError) throw stocksError;
+      const stocksResponse = await stocksAPI.getAll();
+      const stocks = stocksResponse.data;
 
       // Calculer les alertes de stock
       let alertesCount = 0;
       let valeurTotale = 0;
       const stockDataMap = new Map();
 
-      stocks?.forEach(stock => {
-        const produit = produits?.find(p => p.id === stock.produit_id);
+      stocks?.forEach((stock: any) => {
+        const produit = produits?.find((p: any) => p.id === stock.produit_id);
         if (produit) {
           if (stock.quantite <= produit.seuil_alerte) {
             alertesCount++;
           }
           valeurTotale += stock.quantite * produit.prix_unitaire;
 
-          const magasin = magasins?.find(m => m.id === stock.magasin_id);
+          const magasin = magasins?.find((m: any) => m.id === stock.magasin_id);
           if (magasin) {
             const key = magasin.nom;
             if (stockDataMap.has(key)) {

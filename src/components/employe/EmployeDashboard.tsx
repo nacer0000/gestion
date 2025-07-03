@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MapPin, Clock, Package, AlertCircle } from 'lucide-react';
-import { supabase } from '../../config/supabase';
+import { stocksAPI, produitsAPI, magasinsAPI, presencesAPI } from '../../config/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useGeolocation } from '../../hooks/useGeolocation';
 import { Stock, Produit, Magasin, Presence } from '../../types';
@@ -28,33 +28,26 @@ export const EmployeDashboard: React.FC = () => {
 
       try {
         // Récupérer le magasin de l'employé
-        const { data: magasinData, error: magasinError } = await supabase
-          .from('magasins')
-          .select('*')
-          .eq('id', user.magasin_id)
-          .single();
-
-        if (magasinError) throw magasinError;
-        setMagasin(magasinData);
+        const magasinsResponse = await magasinsAPI.getAll();
+        const magasinData = magasinsResponse.data.find((m: any) => m.id === user.magasin_id);
+        if (magasinData) {
+          setMagasin({
+            ...magasinData,
+            createdAt: new Date(magasinData.created_at)
+          });
+        }
 
         // Récupérer les stocks du magasin
-        const { data: stocks, error: stocksError } = await supabase
-          .from('stocks')
-          .select('*')
-          .eq('magasin_id', user.magasin_id);
-
-        if (stocksError) throw stocksError;
+        const stocksResponse = await stocksAPI.getByMagasin(user.magasin_id);
+        const stocks = stocksResponse.data;
 
         // Récupérer les produits pour vérifier les alertes
-        const { data: produits, error: produitsError } = await supabase
-          .from('produits')
-          .select('*');
-
-        if (produitsError) throw produitsError;
+        const produitsResponse = await produitsAPI.getAll();
+        const produits = produitsResponse.data;
 
         let produitsAlertes = 0;
-        stocks?.forEach(stock => {
-          const produit = produits?.find(p => p.id === stock.produit_id);
+        stocks?.forEach((stock: any) => {
+          const produit = produits?.find((p: any) => p.id === stock.produit_id);
           if (produit && stock.quantite <= produit.seuil_alerte) {
             produitsAlertes++;
           }
@@ -66,25 +59,19 @@ export const EmployeDashboard: React.FC = () => {
         });
 
         // Récupérer le dernier pointage
+        const presencesResponse = await presencesAPI.getByUser(user.id);
+        const presences = presencesResponse.data;
+
         const today = new Date();
-        const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+        const todayPresence = presences.find((p: any) => {
+          const pointageDate = new Date(p.date_pointage);
+          return pointageDate.toDateString() === today.toDateString();
+        });
 
-        const { data: presences, error: presencesError } = await supabase
-          .from('presences')
-          .select('*')
-          .eq('user_id', user.id)
-          .gte('date_pointage', startOfDay.toISOString())
-          .lt('date_pointage', endOfDay.toISOString())
-          .order('date_pointage', { ascending: false })
-          .limit(1);
-
-        if (presencesError) throw presencesError;
-
-        if (presences && presences.length > 0) {
+        if (todayPresence) {
           setLastPointage({
-            ...presences[0],
-            date_pointage: new Date(presences[0].date_pointage)
+            ...todayPresence,
+            date_pointage: new Date(todayPresence.date_pointage)
           });
         }
 
@@ -125,18 +112,12 @@ export const EmployeDashboard: React.FC = () => {
         return;
       }
 
-      const { error } = await supabase
-        .from('presences')
-        .insert([{
-          user_id: user.id,
-          magasin_id: magasin.id,
-          date_pointage: new Date().toISOString(),
-          latitude: position.latitude,
-          longitude: position.longitude,
-          type: 'arrivee'
-        }]);
-
-      if (error) throw error;
+      await presencesAPI.create({
+        magasin_id: magasin.id,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        type: 'arrivee'
+      });
 
       setPointageMessage('Pointage enregistré avec succès !');
       setLastPointage({
