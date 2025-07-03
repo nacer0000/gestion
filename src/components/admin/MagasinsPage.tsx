@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Search, Store, MapPin, Save, X, Upload } from 'lucide-react';
-import { supabase } from '../../config/supabase';
+import { magasinsAPI } from '../../config/api';
 import { Magasin } from '../../types';
 import toast from 'react-hot-toast';
 
@@ -25,13 +25,12 @@ export const MagasinsPage: React.FC = () => {
 
   const fetchMagasins = async () => {
     try {
-      const { data, error } = await supabase
-        .from('magasins')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setMagasins(data || []);
+      const response = await magasinsAPI.getAll();
+      const magasinsData = response.data.map((m: any) => ({
+        ...m,
+        createdAt: new Date(m.created_at)
+      }));
+      setMagasins(magasinsData);
     } catch (error) {
       console.error('Erreur lors du chargement des magasins:', error);
       toast.error('Erreur lors du chargement des magasins');
@@ -52,24 +51,6 @@ export const MagasinsPage: React.FC = () => {
     }
   };
 
-  const uploadImage = async (file: File): Promise<string> => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}.${fileExt}`;
-    const filePath = `magasins/${fileName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('images')
-      .upload(filePath, file);
-
-    if (uploadError) throw uploadError;
-
-    const { data } = supabase.storage
-      .from('images')
-      .getPublicUrl(filePath);
-
-    return data.publicUrl;
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -77,30 +58,22 @@ export const MagasinsPage: React.FC = () => {
     try {
       let imageUrl = editingMagasin?.image_url || '';
 
-      if (imageFile) {
-        imageUrl = await uploadImage(imageFile);
+      // Note: Image upload would need to be implemented separately
+      // For now, we'll use the preview URL or existing URL
+      if (imageFile && imagePreview) {
+        imageUrl = imagePreview;
       }
 
       const magasinData = {
         ...formData,
-        image_url: imageUrl,
-        created_at: editingMagasin ? editingMagasin.createdAt.toISOString() : new Date().toISOString()
+        image_url: imageUrl
       };
 
       if (editingMagasin) {
-        const { error } = await supabase
-          .from('magasins')
-          .update(magasinData)
-          .eq('id', editingMagasin.id);
-
-        if (error) throw error;
+        await magasinsAPI.update({ ...magasinData, id: editingMagasin.id });
         toast.success('Magasin modifié avec succès');
       } else {
-        const { error } = await supabase
-          .from('magasins')
-          .insert([magasinData]);
-
-        if (error) throw error;
+        await magasinsAPI.create(magasinData);
         toast.success('Magasin ajouté avec succès');
       }
 
@@ -130,22 +103,7 @@ export const MagasinsPage: React.FC = () => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer ce magasin ?')) return;
 
     try {
-      const { error } = await supabase
-        .from('magasins')
-        .delete()
-        .eq('id', magasin.id);
-
-      if (error) throw error;
-
-      if (magasin.image_url) {
-        const filePath = magasin.image_url.split('/').pop();
-        if (filePath) {
-          await supabase.storage
-            .from('images')
-            .remove([`magasins/${filePath}`]);
-        }
-      }
-
+      await magasinsAPI.delete(magasin.id);
       toast.success('Magasin supprimé avec succès');
       fetchMagasins();
     } catch (error) {

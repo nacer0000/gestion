@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Package, Search, Plus, Minus, AlertTriangle, Save } from 'lucide-react';
-import { supabase } from '../../config/supabase';
+import { stocksAPI, produitsAPI, mouvementsAPI } from '../../config/api';
 import { useAuth } from '../../hooks/useAuth';
 import { Stock, Produit, Mouvement } from '../../types';
 import toast from 'react-hot-toast';
@@ -30,22 +30,20 @@ export const StockPage: React.FC = () => {
 
     try {
       // Récupérer les stocks du magasin
-      const { data: stocksData, error: stocksError } = await supabase
-        .from('stocks')
-        .select('*')
-        .eq('magasin_id', user.magasin_id);
-
-      if (stocksError) throw stocksError;
+      const stocksResponse = await stocksAPI.getByMagasin(user.magasin_id);
+      const stocksData = stocksResponse.data.map((s: any) => ({
+        ...s,
+        updatedAt: new Date(s.updated_at)
+      }));
+      setStocks(stocksData);
 
       // Récupérer tous les produits
-      const { data: produitsData, error: produitsError } = await supabase
-        .from('produits')
-        .select('*');
-
-      if (produitsError) throw produitsError;
-
-      setStocks(stocksData || []);
-      setProduits(produitsData || []);
+      const produitsResponse = await produitsAPI.getAll();
+      const produitsData = produitsResponse.data.map((p: any) => ({
+        ...p,
+        createdAt: new Date(p.created_at)
+      }));
+      setProduits(produitsData);
     } catch (error) {
       console.error('Erreur lors du chargement du stock:', error);
       toast.error('Erreur lors du chargement du stock');
@@ -65,34 +63,13 @@ export const StockPage: React.FC = () => {
 
     try {
       // Enregistrer le mouvement
-      const { error: mouvementError } = await supabase
-        .from('mouvements')
-        .insert([{
-          produit_id: selectedStock.produit_id,
-          magasin_id: selectedStock.magasin_id,
-          user_id: user.id,
-          type: mouvementData.type,
-          quantite: mouvementData.quantite,
-          date: new Date().toISOString(),
-          motif: mouvementData.motif
-        }]);
-
-      if (mouvementError) throw mouvementError;
-
-      // Mettre à jour le stock
-      const nouvelleQuantite = mouvementData.type === 'entrée' 
-        ? selectedStock.quantite + mouvementData.quantite
-        : selectedStock.quantite - mouvementData.quantite;
-
-      const { error: stockError } = await supabase
-        .from('stocks')
-        .update({ 
-          quantite: Math.max(0, nouvelleQuantite),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', selectedStock.id);
-
-      if (stockError) throw stockError;
+      await mouvementsAPI.create({
+        produit_id: selectedStock.produit_id,
+        magasin_id: selectedStock.magasin_id,
+        type: mouvementData.type,
+        quantite: mouvementData.quantite,
+        motif: mouvementData.motif
+      });
 
       toast.success('Mouvement enregistré avec succès');
       resetMouvementForm();

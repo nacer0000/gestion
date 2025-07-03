@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Search, Truck, Phone, MapPin, Save, X, Upload } from 'lucide-react';
-import { supabase } from '../../config/supabase';
+import { fournisseursAPI } from '../../config/api';
 import { Fournisseur } from '../../types';
 import toast from 'react-hot-toast';
 
@@ -24,13 +24,12 @@ export const FournisseursPage: React.FC = () => {
 
   const fetchFournisseurs = async () => {
     try {
-      const { data, error } = await supabase
-        .from('fournisseurs')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setFournisseurs(data || []);
+      const response = await fournisseursAPI.getAll();
+      const fournisseursData = response.data.map((f: any) => ({
+        ...f,
+        createdAt: new Date(f.created_at)
+      }));
+      setFournisseurs(fournisseursData);
     } catch (error) {
       console.error('Erreur lors du chargement des fournisseurs:', error);
       toast.error('Erreur lors du chargement des fournisseurs');
@@ -51,24 +50,6 @@ export const FournisseursPage: React.FC = () => {
     }
   };
 
-  const uploadImage = async (file: File): Promise<string> => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}.${fileExt}`;
-    const filePath = `fournisseurs/${fileName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('images')
-      .upload(filePath, file);
-
-    if (uploadError) throw uploadError;
-
-    const { data } = supabase.storage
-      .from('images')
-      .getPublicUrl(filePath);
-
-    return data.publicUrl;
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -76,30 +57,22 @@ export const FournisseursPage: React.FC = () => {
     try {
       let imageUrl = editingFournisseur?.image_url || '';
 
-      if (imageFile) {
-        imageUrl = await uploadImage(imageFile);
+      // Note: Image upload would need to be implemented separately
+      // For now, we'll use the preview URL or existing URL
+      if (imageFile && imagePreview) {
+        imageUrl = imagePreview;
       }
 
       const fournisseurData = {
         ...formData,
-        image_url: imageUrl,
-        created_at: editingFournisseur ? editingFournisseur.createdAt.toISOString() : new Date().toISOString()
+        image_url: imageUrl
       };
 
       if (editingFournisseur) {
-        const { error } = await supabase
-          .from('fournisseurs')
-          .update(fournisseurData)
-          .eq('id', editingFournisseur.id);
-
-        if (error) throw error;
+        await fournisseursAPI.update({ ...fournisseurData, id: editingFournisseur.id });
         toast.success('Fournisseur modifié avec succès');
       } else {
-        const { error } = await supabase
-          .from('fournisseurs')
-          .insert([fournisseurData]);
-
-        if (error) throw error;
+        await fournisseursAPI.create(fournisseurData);
         toast.success('Fournisseur ajouté avec succès');
       }
 
@@ -128,22 +101,7 @@ export const FournisseursPage: React.FC = () => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer ce fournisseur ?')) return;
 
     try {
-      const { error } = await supabase
-        .from('fournisseurs')
-        .delete()
-        .eq('id', fournisseur.id);
-
-      if (error) throw error;
-
-      if (fournisseur.image_url) {
-        const filePath = fournisseur.image_url.split('/').pop();
-        if (filePath) {
-          await supabase.storage
-            .from('images')
-            .remove([`fournisseurs/${filePath}`]);
-        }
-      }
-
+      await fournisseursAPI.delete(fournisseur.id);
       toast.success('Fournisseur supprimé avec succès');
       fetchFournisseurs();
     } catch (error) {

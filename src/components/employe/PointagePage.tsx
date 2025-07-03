@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MapPin, Clock, CheckCircle, AlertCircle, Calendar } from 'lucide-react';
-import { supabase } from '../../config/supabase';
+import { presencesAPI, magasinsAPI } from '../../config/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useGeolocation } from '../../hooks/useGeolocation';
 import { Presence, Magasin } from '../../types';
@@ -26,34 +26,26 @@ export const PointagePage: React.FC = () => {
 
     try {
       // Récupérer le magasin
-      const { data: magasinData, error: magasinError } = await supabase
-        .from('magasins')
-        .select('*')
-        .eq('id', user.magasin_id)
-        .single();
-      
-      if (magasinError) throw magasinError;
-      setMagasin(magasinData);
+      const magasinsResponse = await magasinsAPI.getAll();
+      const magasinData = magasinsResponse.data.find((m: any) => m.id === user.magasin_id);
+      if (magasinData) {
+        setMagasin({
+          ...magasinData,
+          createdAt: new Date(magasinData.created_at)
+        });
+      }
 
       // Récupérer l'historique des présences
-      const { data: presencesData, error: presencesError } = await supabase
-        .from('presences')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('date_pointage', { ascending: false });
-      
-      if (presencesError) throw presencesError;
-
-      const presencesWithDate = presencesData?.map(p => ({
+      const presencesResponse = await presencesAPI.getByUser(user.id);
+      const presencesData = presencesResponse.data.map((p: any) => ({
         ...p,
         date_pointage: new Date(p.date_pointage)
-      })) || [];
-
-      setPresences(presencesWithDate);
+      }));
+      setPresences(presencesData);
 
       // Vérifier s'il y a déjà un pointage aujourd'hui
       const today = new Date();
-      const todayPresenceData = presencesWithDate.find(p => {
+      const todayPresenceData = presencesData.find((p: Presence) => {
         const pointageDate = p.date_pointage;
         return pointageDate.toDateString() === today.toDateString();
       });
@@ -93,18 +85,12 @@ export const PointagePage: React.FC = () => {
         return;
       }
 
-      const { error } = await supabase
-        .from('presences')
-        .insert([{
-          user_id: user.id,
-          magasin_id: magasin.id,
-          date_pointage: new Date().toISOString(),
-          latitude: position.latitude,
-          longitude: position.longitude,
-          type: 'arrivee'
-        }]);
-
-      if (error) throw error;
+      await presencesAPI.create({
+        magasin_id: magasin.id,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        type: 'arrivee'
+      });
 
       toast.success('Pointage enregistré avec succès !');
       fetchData(); // Recharger les données

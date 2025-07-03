@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Search, Package, AlertTriangle, Save, X, Warehouse } from 'lucide-react';
-import { supabase } from '../../config/supabase';
+import { stocksAPI, produitsAPI, magasinsAPI } from '../../config/api';
 import { Stock, Produit, Magasin } from '../../types';
 import toast from 'react-hot-toast';
 
@@ -25,29 +25,28 @@ export const StockPage: React.FC = () => {
   const fetchData = async () => {
     try {
       // Récupérer les stocks
-      const { data: stocksData, error: stocksError } = await supabase
-        .from('stocks')
-        .select('*');
-
-      if (stocksError) throw stocksError;
+      const stocksResponse = await stocksAPI.getAll();
+      const stocksData = stocksResponse.data.map((s: any) => ({
+        ...s,
+        updatedAt: new Date(s.updated_at)
+      }));
+      setStocks(stocksData);
 
       // Récupérer les produits
-      const { data: produitsData, error: produitsError } = await supabase
-        .from('produits')
-        .select('*');
-
-      if (produitsError) throw produitsError;
+      const produitsResponse = await produitsAPI.getAll();
+      const produitsData = produitsResponse.data.map((p: any) => ({
+        ...p,
+        createdAt: new Date(p.created_at)
+      }));
+      setProduits(produitsData);
 
       // Récupérer les magasins
-      const { data: magasinsData, error: magasinsError } = await supabase
-        .from('magasins')
-        .select('*');
-
-      if (magasinsError) throw magasinsError;
-
-      setStocks(stocksData || []);
-      setProduits(produitsData || []);
-      setMagasins(magasinsData || []);
+      const magasinsResponse = await magasinsAPI.getAll();
+      const magasinsData = magasinsResponse.data.map((m: any) => ({
+        ...m,
+        createdAt: new Date(m.created_at)
+      }));
+      setMagasins(magasinsData);
     } catch (error) {
       console.error('Erreur lors du chargement des données:', error);
       toast.error('Erreur lors du chargement des données');
@@ -62,24 +61,14 @@ export const StockPage: React.FC = () => {
 
     try {
       const stockData = {
-        ...formData,
-        updated_at: new Date().toISOString()
+        ...formData
       };
 
       if (editingStock) {
-        const { error } = await supabase
-          .from('stocks')
-          .update(stockData)
-          .eq('id', editingStock.id);
-
-        if (error) throw error;
+        await stocksAPI.update({ ...stockData, id: editingStock.id });
         toast.success('Stock modifié avec succès');
       } else {
-        const { error } = await supabase
-          .from('stocks')
-          .insert([stockData]);
-
-        if (error) throw error;
+        await stocksAPI.create(stockData);
         toast.success('Stock ajouté avec succès');
       }
 
@@ -107,12 +96,7 @@ export const StockPage: React.FC = () => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer ce stock ?')) return;
 
     try {
-      const { error } = await supabase
-        .from('stocks')
-        .delete()
-        .eq('id', stock.id);
-
-      if (error) throw error;
+      await stocksAPI.delete(stock.id);
       toast.success('Stock supprimé avec succès');
       fetchData();
     } catch (error) {

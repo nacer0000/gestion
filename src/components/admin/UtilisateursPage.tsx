@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Search, Users, Shield, User, Save, X } from 'lucide-react';
-import { supabase } from '../../config/supabase';
+import { usersAPI, magasinsAPI } from '../../config/api';
 import { User as UserType, Magasin } from '../../types';
 import toast from 'react-hot-toast';
 
@@ -25,13 +25,12 @@ export const UtilisateursPage: React.FC = () => {
 
   const fetchUsers = async () => {
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setUsers(data || []);
+      const response = await usersAPI.getAll();
+      const usersData = response.data.map((u: any) => ({
+        ...u,
+        createdAt: new Date(u.created_at)
+      }));
+      setUsers(usersData);
     } catch (error) {
       console.error('Erreur lors du chargement des utilisateurs:', error);
       toast.error('Erreur lors du chargement des utilisateurs');
@@ -42,12 +41,12 @@ export const UtilisateursPage: React.FC = () => {
 
   const fetchMagasins = async () => {
     try {
-      const { data, error } = await supabase
-        .from('magasins')
-        .select('*');
-
-      if (error) throw error;
-      setMagasins(data || []);
+      const response = await magasinsAPI.getAll();
+      const magasinsData = response.data.map((m: any) => ({
+        ...m,
+        createdAt: new Date(m.created_at)
+      }));
+      setMagasins(magasinsData);
     } catch (error) {
       console.error('Erreur lors du chargement des magasins:', error);
     }
@@ -60,41 +59,24 @@ export const UtilisateursPage: React.FC = () => {
     try {
       if (editingUser) {
         // Modification d'un utilisateur existant
-        const updateData: any = {
+        const updateData = {
+          id: editingUser.id,
           role: formData.role,
           magasin_id: formData.magasin_id || null
         };
 
-        const { error } = await supabase
-          .from('users')
-          .update(updateData)
-          .eq('id', editingUser.id);
-
-        if (error) throw error;
+        await usersAPI.update(updateData);
         toast.success('Utilisateur modifié avec succès');
       } else {
         // Création d'un nouvel utilisateur
-        const { data: authData, error: authError } = await supabase.auth.signUp({
+        const userData = {
           email: formData.email,
           password: formData.password,
-        });
+          role: formData.role,
+          magasin_id: formData.magasin_id || null
+        };
 
-        if (authError) throw authError;
-
-        if (authData.user) {
-          const { error: insertError } = await supabase
-            .from('users')
-            .insert([{
-              id: authData.user.id,
-              email: formData.email,
-              role: formData.role,
-              magasin_id: formData.magasin_id || null,
-              created_at: new Date().toISOString()
-            }]);
-
-          if (insertError) throw insertError;
-        }
-        
+        await usersAPI.create(userData);
         toast.success('Utilisateur créé avec succès');
       }
 
@@ -102,9 +84,9 @@ export const UtilisateursPage: React.FC = () => {
       fetchUsers();
     } catch (error: any) {
       console.error('Erreur lors de la sauvegarde:', error);
-      if (error.message?.includes('email')) {
+      if (error.response?.data?.message?.includes('email')) {
         toast.error('Cette adresse email est déjà utilisée');
-      } else if (error.message?.includes('password')) {
+      } else if (error.response?.data?.message?.includes('password')) {
         toast.error('Le mot de passe doit contenir au moins 6 caractères');
       } else {
         toast.error('Erreur lors de la sauvegarde');
@@ -129,12 +111,7 @@ export const UtilisateursPage: React.FC = () => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) return;
 
     try {
-      const { error } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', user.id);
-
-      if (error) throw error;
+      await usersAPI.delete(user.id);
       toast.success('Utilisateur supprimé avec succès');
       fetchUsers();
     } catch (error) {

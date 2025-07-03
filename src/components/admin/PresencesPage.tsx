@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, MapPin, User, Filter, Download } from 'lucide-react';
-import { supabase } from '../../config/supabase';
+import { presencesAPI, usersAPI, magasinsAPI } from '../../config/api';
 import { Presence, User as UserType, Magasin } from '../../types';
 import toast from 'react-hot-toast';
 
@@ -24,21 +24,20 @@ export const PresencesPage: React.FC = () => {
   const fetchData = async () => {
     try {
       // Récupérer les utilisateurs
-      const { data: usersData, error: usersError } = await supabase
-        .from('users')
-        .select('*');
-
-      if (usersError) throw usersError;
+      const usersResponse = await usersAPI.getAll();
+      const usersData = usersResponse.data.map((u: any) => ({
+        ...u,
+        createdAt: new Date(u.created_at)
+      }));
+      setUsers(usersData);
 
       // Récupérer les magasins
-      const { data: magasinsData, error: magasinsError } = await supabase
-        .from('magasins')
-        .select('*');
-
-      if (magasinsError) throw magasinsError;
-
-      setUsers(usersData || []);
-      setMagasins(magasinsData || []);
+      const magasinsResponse = await magasinsAPI.getAll();
+      const magasinsData = magasinsResponse.data.map((m: any) => ({
+        ...m,
+        createdAt: new Date(m.created_at)
+      }));
+      setMagasins(magasinsData);
     } catch (error) {
       console.error('Erreur lors du chargement des données:', error);
       toast.error('Erreur lors du chargement des données');
@@ -48,42 +47,32 @@ export const PresencesPage: React.FC = () => {
   const fetchPresences = async () => {
     setLoading(true);
     try {
-      let query = supabase
-        .from('presences')
-        .select('*')
-        .order('date_pointage', { ascending: false });
+      const response = await presencesAPI.getAll();
+      let presencesData = response.data.map((p: any) => ({
+        ...p,
+        date_pointage: new Date(p.date_pointage)
+      }));
 
       // Filtrer par date
       if (selectedDate) {
-        const startDate = new Date(selectedDate);
-        const endDate = new Date(selectedDate);
-        endDate.setDate(endDate.getDate() + 1);
-        
-        query = query
-          .gte('date_pointage', startDate.toISOString())
-          .lt('date_pointage', endDate.toISOString());
+        const filterDate = new Date(selectedDate);
+        presencesData = presencesData.filter((p: Presence) => {
+          const presenceDate = new Date(p.date_pointage);
+          return presenceDate.toDateString() === filterDate.toDateString();
+        });
       }
 
       // Filtrer par magasin
       if (selectedMagasin) {
-        query = query.eq('magasin_id', selectedMagasin);
+        presencesData = presencesData.filter((p: Presence) => p.magasin_id === selectedMagasin);
       }
 
       // Filtrer par utilisateur
       if (selectedUser) {
-        query = query.eq('user_id', selectedUser);
+        presencesData = presencesData.filter((p: Presence) => p.user_id === selectedUser);
       }
 
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      const presencesWithDate = data?.map(p => ({
-        ...p,
-        date_pointage: new Date(p.date_pointage)
-      })) || [];
-
-      setPresences(presencesWithDate);
+      setPresences(presencesData);
     } catch (error) {
       console.error('Erreur lors du chargement des présences:', error);
       toast.error('Erreur lors du chargement des présences');
