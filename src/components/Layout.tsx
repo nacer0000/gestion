@@ -13,7 +13,6 @@ import {
   Clock,
   Warehouse
 } from 'lucide-react';
-import { supabase } from '../config/supabase';
 import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
 
@@ -22,13 +21,13 @@ interface LayoutProps {
 }
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
+      await logout();
       toast.success('Déconnexion réussie');
       navigate('/login');
     } catch (error) {

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Package, Eye, EyeOff, Mail, Lock } from 'lucide-react';
-import { supabase } from '../config/supabase';
 import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
 
@@ -11,7 +10,7 @@ export const LoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, login } = useAuth();
 
   React.useEffect(() => {
     if (user) {
@@ -28,36 +27,13 @@ export const LoginPage: React.FC = () => {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        toast.error('Email ou mot de passe incorrect');
-        return;
-      }
-
-      if (data.user) {
-        // Récupérer les données utilisateur
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', data.user.id)
-          .single();
-
-        if (userError || !userData) {
-          toast.error('Profil utilisateur non trouvé');
-          return;
-        }
-
+      const result = await login(email, password);
+      
+      if (result.success) {
         toast.success('Connexion réussie');
-        
-        if (userData.role === 'admin') {
-          navigate('/admin/dashboard');
-        } else {
-          navigate('/employe/dashboard');
-        }
+        // Navigation will be handled by useEffect when user state updates
+      } else {
+        toast.error(result.message || 'Email ou mot de passe incorrect');
       }
     } catch (error) {
       toast.error('Erreur lors de la connexion');
@@ -140,6 +116,13 @@ export const LoginPage: React.FC = () => {
               )}
             </button>
           </form>
+
+          {/* Informations de test */}
+          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+            <h4 className="text-sm font-medium text-gray-700 mb-2">Compte de test :</h4>
+            <p className="text-xs text-gray-600">Email: admin@stockpro.com</p>
+            <p className="text-xs text-gray-600">Mot de passe: password</p>
+          </div>
         </div>
 
         {/* Note pour les développeurs */}
